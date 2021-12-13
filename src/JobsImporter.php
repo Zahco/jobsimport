@@ -1,42 +1,45 @@
 <?php
 
-class JobsImporter
+abstract class JobsImporter
 {
     private $db;
 
     private $file;
 
-    public function __construct($host, $username, $password, $databaseName, $file)
+    public function __construct($file)
     {
         $this->file = $file;
-        
-        /* connect to DB */
-        try {
-            $this->db = new PDO('mysql:host=' . $host . ';dbname=' . $databaseName, $username, $password);
-        } catch (Exception $e) {
-            die('DB error: ' . $e->getMessage() . "\n");
-        }
     }
 
+    /* Parse File jobs and return an array of JobEntity */
+    abstract protected function parseJobs() :array;
+    /* Define source of jobs */
+    abstract protected function getSource() :string;
+
+    protected function getFile() :string {
+        return $this->file;
+    }
+
+    /* Add parse jobs to bdd */
     public function importJobs()
     {
-        /* remove existing items */
-        $this->db->exec('DELETE FROM job');
 
         /* parse XML file */
-        $xml = simplexml_load_file($this->file);
+        $jobs = $this->parseJobs();
 
         /* import each item */
         $count = 0;
-        foreach ($xml->item as $item) {
-            $this->db->exec('INSERT INTO job (reference, title, description, url, company_name, publication) VALUES ('
-                . '\'' . addslashes($item->ref) . '\', '
-                . '\'' . addslashes($item->title) . '\', '
-                . '\'' . addslashes($item->description) . '\', '
-                . '\'' . addslashes($item->url) . '\', '
-                . '\'' . addslashes($item->company) . '\', '
-                . '\'' . addslashes($item->pubDate) . '\')'
-            );
+        foreach ($jobs as $job) {
+            $req = CmcPDO::getDB()->prepare('INSERT INTO job (reference, title, description, link, company, publishDate, source) VALUES (?, ?, ?, ?, ?, ?, ?)');
+            $req->execute([
+                $job->getReference(),
+                $job->getTitle(),
+                $job->getDescription(),
+                $job->getLink(),
+                $job->getCompany(),
+                $job->getPublishDate()->format('Y-m-d H:i:s'),
+                $job->getSource()
+            ]);
             $count++;
         }
         return $count;
